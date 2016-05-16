@@ -4,6 +4,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Environment;
 import android.provider.MediaStore;
@@ -76,7 +77,24 @@ public class FileUtil {
     }
     
     public static String savePhoto(byte[] data, String fileName) {
-    	return saveFile(data, photoDir(), fileName);
+//    	return saveFile(data, photoDir(), fileName);
+        String path = photoDir().getAbsolutePath();
+//        long dataTake = System.currentTimeMillis();
+        String jpegName = path + "/" + fileName;
+        Bitmap bmp = BitmapFactory.decodeByteArray(data, 0, data.length);
+        Log.i(TAG, "saveBitmap:jpegName = " + jpegName);
+        try {
+            FileOutputStream fout = new FileOutputStream(jpegName);
+            BufferedOutputStream bos = new BufferedOutputStream(fout);
+            bmp.compress(Bitmap.CompressFormat.JPEG, 100, bos);
+            bos.flush();
+            bos.close();
+            return jpegName;
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        return null;
     }
     
     public static String saveFile(byte[] data, File path, String fileName) {

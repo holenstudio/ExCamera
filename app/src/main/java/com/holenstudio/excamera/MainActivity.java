@@ -13,7 +13,6 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.Camera;
 import android.hardware.Camera.AutoFocusCallback;
-import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.Face;
 import android.hardware.Camera.FaceDetectionListener;
 import android.hardware.Camera.Parameters;
@@ -24,6 +23,7 @@ import android.os.Bundle;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.util.Size;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -72,8 +72,15 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            if (mCamera == null) {
+                mCameraHolder = CameraHolder.getCameraHolder();
+                mCamera = mCameraHolder.getCamera();
+                mParams = mCameraHolder.getParameter();
+
+            }
             mCameraZoomValue.setText(String.valueOf(progress));
             mParams.setZoom(progress);
+            Log.d(TAG, mCamera.toString());
             mCamera.setParameters(mParams);
         }
 
@@ -100,13 +107,13 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
+            String imagePath = FileUtil.savePhoto(data, System.currentTimeMillis() + ".jpg");
             BitmapFactory.Options option = new BitmapFactory.Options();
             option.inJustDecodeBounds = true;
             BitmapFactory.decodeByteArray(data, 0, data.length, option);
             option.inSampleSize = CameraUtil.calculateInSampleSize(option, mPictureIv.getMeasuredWidth(),
                     mPictureIv.getMeasuredHeight());
             option.inJustDecodeBounds = false;
-            String imagePath = FileUtil.savePhoto(data, System.currentTimeMillis() + ".jpg");
             mPictureIv.setImageBitmap(BitmapFactory.decodeByteArray(data, 0, data.length, option));
             try {
                 MediaStore.Images.Media.insertImage(getContentResolver(), imagePath,
@@ -161,15 +168,20 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         if (mVideoStatus) {
                             mRecorder.stop();
-                            CameraUtil.releaseMediaRecorder(mRecorder);
-                            mCameraHolder.getCameraInstance().lock();
+                            releaseMediaRecorder();
+                            mCamera.lock();
                             mVideoStatus = false;
+                            mCaptureBtn.setBackgroundResource(R.drawable.btn_recorder_background);
                         } else {
-                            if (mCameraHolder.prepareVideoRecorder(mCamera, mRecorder, mCameraPreview)) {
+                            if (mRecorder == null) {
+                                mRecorder = new MediaRecorder();
+                            }
+                            if (CameraUtil.prepareVideoRecorder(mCamera, mRecorder, mCameraPreview)) {
                                 mRecorder.start();
+                                mCaptureBtn.setBackgroundResource(R.drawable.btn_recorder_stop_background);
                                 mVideoStatus = true;
                             } else {
-                                CameraUtil.releaseMediaRecorder(mRecorder);
+                                releaseMediaRecorder();
                             }
                         }
                     }
@@ -192,6 +204,9 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case R.id.iv_switch_camera:
                     mCameraFrontView.clearFaces();
+                    mCamera = mCameraHolder.switchCamera();
+                    mParams = mCameraHolder.getParameter();
+                    mCameraInfo = mCameraHolder.getCameraInfo();
                     try {
                         mCamera.setPreviewDisplay(mHolder);
                     } catch (IOException e) {
@@ -199,13 +214,12 @@ public class MainActivity extends AppCompatActivity {
                     }
                     // 设置摄像头旋转的角度
                     CameraUtil.setCameraDisplayOrientation(MainActivity.this, mCameraInfo, mCamera);
-                    mParams = mCamera.getParameters();
                     CameraUtil.setParameterOrientation(MainActivity.this, mCameraInfo, mParams);
                     mParams.setPreviewSize(mCameraPreview.getMeasuredHeight(), mCameraPreview.getMeasuredWidth());
                     mCamera.setParameters(mParams);
                     mCamera.startPreview();
                     mCamera.autoFocus(mAutoFocusCallback);
-                    checkFaceDetection();
+                    startFaceDetection();
                     break;
                 default:
                     break;
@@ -300,9 +314,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
             if (mCamera == null) {
-                mCameraHolder = CameraHolder.getCameraHolder();
-                mCamera = mCameraHolder.getCameraInstance();
-                mCameraInfo = mCameraHolder.getCameraInfo();
+                initCamera();
             }
             if (mHolder.getSurface() == null) {
                 return;
@@ -316,6 +328,11 @@ public class MainActivity extends AppCompatActivity {
 
             try {
                 mCamera.setPreviewDisplay(mHolder);
+                mCameraFrontView.setDisplayOrientation(90);
+                CameraUtil.setCameraDisplayOrientation(MainActivity.this, mCameraInfo, mCamera);
+                mParams.setPreviewSize(mCameraPreview.getMeasuredHeight(), mCameraPreview.getMeasuredWidth());
+                mCamera.setDisplayOrientation(90);
+                mCamera.setParameters(mParams);
                 mCamera.startPreview();
             } catch (Exception e) {
                 Log.d(TAG, "Error starting camera preview:" + e.getMessage());
@@ -334,10 +351,8 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mCameraHolder = CameraHolder.getCameraHolder();
-        mCamera = mCameraHolder.getCamera();
-        mCameraInfo = mCameraHolder.getCameraInfo();
-        mParams = mCameraHolder.getParameter();
+        initCamera();
+        initCameraParams();
         mCameraPreview = (SurfaceView) findViewById(R.id.camera_view);
         mHolder = mCameraPreview.getHolder();
         mHolder.setFormat(PixelFormat.TRANSPARENT);
@@ -379,15 +394,40 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void initCamera() {
+        mCameraHolder = CameraHolder.getCameraHolder();
+        mCamera = mCameraHolder.getCamera();
+        mParams = mCameraHolder.getParameter();
+        mCameraInfo = mCameraHolder.getCameraInfo();
+    }
+
+    private void initCameraParams() {
+        mParams.setAntibanding(Parameters.ANTIBANDING_AUTO);
+        mParams.setColorEffect(Parameters.EFFECT_NONE);
+        mParams.setFlashMode(Parameters.FLASH_MODE_AUTO);
+        mParams.setFocusMode(Parameters.FOCUS_MODE_AUTO);
+        mParams.setJpegQuality(100);
+        mParams.setWhiteBalance(Parameters.WHITE_BALANCE_AUTO);
+        List<Camera.Size> supporteSize = mParams.getSupportedPictureSizes();
+        for (Camera.Size size:supporteSize) {
+            Log.d(TAG, "width=" + size.width + ", height=" + size.height);
+            if (size.width == 1280) {
+                mParams.setPictureSize(size.width, size.height);
+            }
+            if (size.height == 720) {
+                mParams.setPictureSize(size.width, size.height);
+            }
+        }
+        mCameraHolder.setParameters(mParams);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
 
         initViewParams();
         if (mCamera == null) {
-            mCamera = mCameraHolder.getCameraInstance();
-            mCameraInfo = mCameraHolder.getCameraInfo();
-            mParams = mCamera.getParameters();
+            initCamera();
         }
         CameraUtil.setParameterOrientation(MainActivity.this, mCameraInfo, mParams);
         mCamera.stopPreview();
@@ -399,19 +439,20 @@ public class MainActivity extends AppCompatActivity {
         }
         mCamera.startPreview();
 
-        checkFaceDetection();
+        startFaceDetection();
     }
 
-    private void checkFaceDetection() {
+    private void startFaceDetection() {
         mCamera.setFaceDetectionListener(mFaceDatectionListener);
-        if (mIsStartFaceDetection) {
+        if (!mIsStartFaceDetection) {
             mCamera.cancelAutoFocus();
             mCamera.startFaceDetection();
         } else {
             mCamera.autoFocus(mAutoFocusCallback);
-            mCamera.startFaceDetection();
             mCamera.stopFaceDetection();
+            mCamera.startFaceDetection();
         }
+        mIsStartFaceDetection = true;
     }
 
     @Override
@@ -419,7 +460,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
 
         releaseCamera();
-        CameraUtil.releaseMediaRecorder(mRecorder);
+        releaseMediaRecorder();
     }
 
     private void initViewParams() {
@@ -439,15 +480,24 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    public void releaseCamera() {
+    private void releaseCamera() {
         if (mCamera != null) {
             try {
                 mCamera.stopPreview();
                 mCamera.release();
                 mCamera = null;
+                mCameraHolder.setCamera(null);
             } catch (Exception e) {
                 Log.d(TAG, "Error release camera:" + e.getMessage());
             }
+        }
+    }
+
+    private void releaseMediaRecorder() {
+        if (mRecorder != null) {
+            mRecorder.reset();
+            mRecorder.release();
+            mRecorder = null;
         }
     }
 

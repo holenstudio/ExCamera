@@ -11,9 +11,11 @@ import android.graphics.Rect;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.Parameters;
+import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
 import android.util.Log;
 import android.view.Surface;
+import android.view.SurfaceView;
 
 import com.holenstudio.excamera.CameraHolder;
 
@@ -175,5 +177,44 @@ public class CameraUtil {
         // UI coordinates range from (0, 0) to (width, height).
         matrix.postScale(viewWidth / 2000f, viewHeight / 2000f);
         matrix.postTranslate(viewWidth / 2f, viewHeight / 2f);
+    }
+
+    public static boolean prepareVideoRecorder(Camera camera, MediaRecorder recorder,
+                                               SurfaceView preview) {
+        // Step1:Unlock and set camera to MediaRecorder
+        camera.unlock();
+        recorder.setCamera(camera);
+
+        // Step2:Set sources
+        recorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
+        recorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
+
+        // Step3:Set a CamcorderProfile
+        recorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_720P));
+
+        // Step4:Set output file
+        recorder.setOutputFile(FileUtil.videoDir().getAbsolutePath() + "/" +  System.currentTimeMillis() + ".mp4");
+
+        // Step5:Set the preview output
+        recorder.setPreviewDisplay(preview.getHolder().getSurface());
+
+        // Step6:Prepare configured MediaRecorder
+        try {
+            recorder.prepare();
+        } catch (IllegalStateException e) {
+            Log.d(TAG,
+                    "IllegalStateException preparing MediaRecorder: "
+                            + e.getMessage());
+            CameraUtil.releaseMediaRecorder(recorder);
+            CameraUtil.releaseCamera(camera);
+            return false;
+        } catch (IOException e) {
+            Log.d(TAG, "IOException preparing MediaRecorder: " + e.getMessage());
+            CameraUtil.releaseMediaRecorder(recorder);
+            CameraUtil.releaseCamera(camera);
+            return false;
+        }
+
+        return true;
     }
 }
