@@ -17,7 +17,7 @@
         android:layout_marginTop="10dp"
         android:background="@drawable/btn_switch_camera" />
 
-    <com.example.excamera.view.FrontView
+    <com.holenstudio.excamera.view.FrontView
         android:id="@+id/camera_front_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
