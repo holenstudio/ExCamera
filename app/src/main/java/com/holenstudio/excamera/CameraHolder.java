@@ -25,6 +25,7 @@ public class CameraHolder {
     private boolean mIsFrontCamera;
     private int cameraCount;
     private int cameraId = CameraInfo.CAMERA_FACING_BACK;
+    private static String mRecorderPath;
 
     public static CameraHolder getCameraHolder() {
         if (mHolder == null) {
@@ -141,5 +142,49 @@ public class CameraHolder {
 
     public void setCamera (Camera camera) {
         mCamera = camera;
+    }
+
+    public static boolean prepareVideoRecorder(Camera camera, MediaRecorder recorder,
+                                               SurfaceView preview) {
+        // Step1:Unlock and set camera to MediaRecorder
+        camera.unlock();
+        recorder.setCamera(camera);
+
+        // Step2:Set sources
+        recorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
+        recorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
+
+        // Step3:Set a CamcorderProfile
+        recorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_720P));
+
+        // Step4:Set output file
+        mRecorderPath = FileUtil.videoDir().getAbsolutePath() + "/" +  System.currentTimeMillis() + ".mp4";
+        recorder.setOutputFile(mRecorderPath);
+
+        // Step5:Set the preview output
+        recorder.setPreviewDisplay(preview.getHolder().getSurface());
+
+        // Step6:Prepare configured MediaRecorder
+        try {
+            recorder.prepare();
+        } catch (IllegalStateException e) {
+            Log.d(TAG,
+                    "IllegalStateException preparing MediaRecorder: "
+                            + e.getMessage());
+            CameraUtil.releaseMediaRecorder(recorder);
+            CameraUtil.releaseCamera(camera);
+            return false;
+        } catch (IOException e) {
+            Log.d(TAG, "IOException preparing MediaRecorder: " + e.getMessage());
+            CameraUtil.releaseMediaRecorder(recorder);
+            CameraUtil.releaseCamera(camera);
+            return false;
+        }
+
+        return true;
+    }
+
+    public static String getRecorderPath() {
+        return mRecorderPath;
     }
 }

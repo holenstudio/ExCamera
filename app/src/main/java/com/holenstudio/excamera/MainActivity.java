@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -43,6 +44,7 @@ import android.widget.Toast;
 import com.holenstudio.excamera.util.CameraUtil;
 import com.holenstudio.excamera.util.DisplayUtil;
 import com.holenstudio.excamera.util.FileUtil;
+import com.holenstudio.excamera.view.CameraParasPopupWindow;
 import com.holenstudio.excamera.view.FrontView;
 
 public class MainActivity extends AppCompatActivity {
@@ -50,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean mVideoStatus = false;
     private boolean mIsTakePicture = true;
     private boolean mIsStartFaceDetection = false;
+    private boolean mIsShowPopupWindow = false;
 
     private CameraHolder mCameraHolder;
     private SurfaceView mCameraPreview;
@@ -63,10 +66,12 @@ public class MainActivity extends AppCompatActivity {
     private Button mSwichModeBtn;
     private ImageView mPictureIv;
     private ImageView mSwitchIv;
+    private ImageView mSettingIv;
     private View mFocusArea;
     private SeekBar mCameraZoomSeekBar;
     private TextView mCameraZoomValue;
     private FrontView mCameraFrontView;
+    private CameraParasPopupWindow mPopupWindow;
 
     private OnSeekBarChangeListener mSeekBarChangeListener = new OnSeekBarChangeListener() {
 
@@ -123,6 +128,7 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.parse("file://" + imagePath));
+            sendBroadcast(intent);
 
             mCamera.stopPreview();
             mCamera.startPreview();
@@ -168,6 +174,8 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         if (mVideoStatus) {
                             mRecorder.stop();
+                            Bitmap bitmap = CameraUtil.getVideoThumbnail(CameraHolder.getRecorderPath(), mPictureIv.getWidth(), mPictureIv.getHeight(), MediaStore.Images.Thumbnails.MICRO_KIND);
+                            mPictureIv.setImageBitmap(CameraUtil.rotatingImageFromCamera(mCameraInfo, DisplayUtil.getActivityOrientation(MainActivity.this), bitmap));
                             releaseMediaRecorder();
                             mCamera.lock();
                             mVideoStatus = false;
@@ -176,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
                             if (mRecorder == null) {
                                 mRecorder = new MediaRecorder();
                             }
-                            if (CameraUtil.prepareVideoRecorder(mCamera, mRecorder, mCameraPreview)) {
+                            if (CameraHolder.prepareVideoRecorder(mCamera, mRecorder, mCameraPreview)) {
                                 mRecorder.start();
                                 mCaptureBtn.setBackgroundResource(R.drawable.btn_recorder_stop_background);
                                 mVideoStatus = true;
@@ -217,9 +225,19 @@ public class MainActivity extends AppCompatActivity {
                     CameraUtil.setParameterOrientation(MainActivity.this, mCameraInfo, mParams);
                     mParams.setPreviewSize(mCameraPreview.getMeasuredHeight(), mCameraPreview.getMeasuredWidth());
                     mCamera.setParameters(mParams);
+                    mPopupWindow.setCameraParams(mParams);
                     mCamera.startPreview();
                     mCamera.autoFocus(mAutoFocusCallback);
+                    mIsStartFaceDetection = false;
                     startFaceDetection();
+                    break;
+                case R.id.iv_camera_setting :
+                    if (!mIsShowPopupWindow) {
+                        mPopupWindow.showAsDropDown(v);
+                    } else {
+                        mPopupWindow.dismiss();
+                    }
+                    mIsShowPopupWindow = !mIsShowPopupWindow;
                     break;
                 default:
                     break;
@@ -304,7 +322,9 @@ public class MainActivity extends AppCompatActivity {
                 CameraUtil.setCameraDisplayOrientation(MainActivity.this, mCameraInfo, mCamera);
                 mParams.setPreviewSize(mCameraPreview.getMeasuredHeight(), mCameraPreview.getMeasuredWidth());
                 mCamera.setParameters(mParams);
+                mPopupWindow.setCameraParams(mParams);
                 mCamera.startPreview();
+                startFaceDetection();
                 // mCamera.autoFocus(mAutoFocusCallback);
             } catch (IOException e) {
                 Log.d(TAG, "Error setting camera preview:" + e.getMessage());
@@ -333,7 +353,9 @@ public class MainActivity extends AppCompatActivity {
                 mParams.setPreviewSize(mCameraPreview.getMeasuredHeight(), mCameraPreview.getMeasuredWidth());
                 mCamera.setDisplayOrientation(90);
                 mCamera.setParameters(mParams);
+                mPopupWindow.setCameraParams(mParams);
                 mCamera.startPreview();
+                startFaceDetection();
             } catch (Exception e) {
                 Log.d(TAG, "Error starting camera preview:" + e.getMessage());
             }
@@ -341,8 +363,17 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
+            mIsStartFaceDetection = false;
             // release camera
             // CameraUtil.releaseCamera();
+        }
+    };
+
+    public CameraParasPopupWindow.OnParameterSelectedListener mSelectedListener = new CameraParasPopupWindow.OnParameterSelectedListener() {
+
+        @Override
+        public void selectedParameter(Parameters params) {
+            mCamera.setParameters(params);
         }
     };
 
@@ -370,6 +401,7 @@ public class MainActivity extends AppCompatActivity {
         mSwichModeBtn = (Button) findViewById(R.id.btn_switch_mode);
         mPictureIv = (ImageView) findViewById(R.id.iv_picture);
         mSwitchIv = (ImageView) findViewById(R.id.iv_switch_camera);
+        mSettingIv = (ImageView) findViewById(R.id.iv_camera_setting);
         mFocusArea = findViewById(R.id.focus_area);
         mCameraZoomSeekBar = (SeekBar) findViewById(R.id.camera_zoom_seek_bar);
         mCameraZoomValue = (TextView) findViewById(R.id.camera_zoom_value);
@@ -378,6 +410,7 @@ public class MainActivity extends AppCompatActivity {
         mCaptureBtn.setOnClickListener(mClickListener);
         mSwichModeBtn.setOnClickListener(mClickListener);
         mPictureIv.setOnClickListener(mClickListener);
+        mSettingIv.setOnClickListener(mClickListener);
         mSwitchIv.setOnClickListener(mClickListener);
         mCameraPreview.setOnTouchListener(mTouchListener);
         mCameraZoomSeekBar.setOnSeekBarChangeListener(mSeekBarChangeListener);
@@ -385,6 +418,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initData() {
+        mPopupWindow = new CameraParasPopupWindow(MainActivity.this);
+        mPopupWindow.setCameraParams(mParams);
+        mPopupWindow.setOnParameterSelectedListener(mSelectedListener);
+        mPopupWindow.setOutsideTouchable(false);
         mCameraZoomValue.setText(String.valueOf(mParams.getZoom()));
         mCameraFrontView.setDisplayOrientation(90);
         if (mIsTakePicture) {
@@ -432,6 +469,7 @@ public class MainActivity extends AppCompatActivity {
         CameraUtil.setParameterOrientation(MainActivity.this, mCameraInfo, mParams);
         mCamera.stopPreview();
         mCamera.setParameters(mParams);
+        mPopupWindow.setCameraParams(mParams);
         try {
             mCamera.setPreviewDisplay(mHolder);
         } catch (IOException e) {
@@ -439,7 +477,6 @@ public class MainActivity extends AppCompatActivity {
         }
         mCamera.startPreview();
 
-        startFaceDetection();
     }
 
     private void startFaceDetection() {
@@ -483,6 +520,7 @@ public class MainActivity extends AppCompatActivity {
     private void releaseCamera() {
         if (mCamera != null) {
             try {
+                mIsStartFaceDetection = false;
                 mCamera.stopPreview();
                 mCamera.release();
                 mCamera = null;

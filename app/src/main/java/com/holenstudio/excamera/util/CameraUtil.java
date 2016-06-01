@@ -5,6 +5,7 @@ import java.io.IOException;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.graphics.Rect;
@@ -13,6 +14,7 @@ import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.Parameters;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
+import android.media.ThumbnailUtils;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceView;
@@ -179,42 +181,53 @@ public class CameraUtil {
         matrix.postTranslate(viewWidth / 2f, viewHeight / 2f);
     }
 
-    public static boolean prepareVideoRecorder(Camera camera, MediaRecorder recorder,
-                                               SurfaceView preview) {
-        // Step1:Unlock and set camera to MediaRecorder
-        camera.unlock();
-        recorder.setCamera(camera);
+    /**
+     * 获取视频的缩略图
+     * 先通过ThumbnailUtils来创建一个视频的缩略图，然后再利用ThumbnailUtils来生成指定大小的缩略图。
+     * 如果想要的缩略图的宽和高都小于MICRO_KIND，则类型要使用MICRO_KIND作为kind的值，这样会节省内存。
+     * @param videoPath 视频的路径
+     * @param width 指定输出视频缩略图的宽度
+     * @param height 指定输出视频缩略图的高度度
+     * @param kind 参照MediaStore.Images.Thumbnails类中的常量MINI_KIND和MICRO_KIND。
+     *            其中，MINI_KIND: 512 x 384，MICRO_KIND: 96 x 96
+     * @return 指定大小的视频缩略图
+     */
+    public static Bitmap getVideoThumbnail(String videoPath, int width, int height,
+                                           int kind) {
+        Bitmap bitmap = null;
+        // 获取视频的缩略图
+        bitmap = ThumbnailUtils.createVideoThumbnail(videoPath, kind);
+        System.out.println("w"+bitmap.getWidth());
+        System.out.println("h"+bitmap.getHeight());
+        bitmap = ThumbnailUtils.extractThumbnail(bitmap, width, height,
+                ThumbnailUtils.OPTIONS_RECYCLE_INPUT);
+        return bitmap;
+    }
 
-        // Step2:Set sources
-        recorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
-        recorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-
-        // Step3:Set a CamcorderProfile
-        recorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_720P));
-
-        // Step4:Set output file
-        recorder.setOutputFile(FileUtil.videoDir().getAbsolutePath() + "/" +  System.currentTimeMillis() + ".mp4");
-
-        // Step5:Set the preview output
-        recorder.setPreviewDisplay(preview.getHolder().getSurface());
-
-        // Step6:Prepare configured MediaRecorder
-        try {
-            recorder.prepare();
-        } catch (IllegalStateException e) {
-            Log.d(TAG,
-                    "IllegalStateException preparing MediaRecorder: "
-                            + e.getMessage());
-            CameraUtil.releaseMediaRecorder(recorder);
-            CameraUtil.releaseCamera(camera);
-            return false;
-        } catch (IOException e) {
-            Log.d(TAG, "IOException preparing MediaRecorder: " + e.getMessage());
-            CameraUtil.releaseMediaRecorder(recorder);
-            CameraUtil.releaseCamera(camera);
-            return false;
+    public static Bitmap rotatingImageFromCamera(Camera.CameraInfo info, int degrees, Bitmap bitmap) {
+        int result;
+        if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+            result = (info.orientation + degrees) % 360;
+            result = (360 - result) % 360; // compensate the mirror
+        } else { // back-facing
+            result = (info.orientation - degrees + 360) % 360;
         }
+        return rotatingImageView(result, bitmap);
+    }
 
-        return true;
+    /*
+     * 旋转图片
+     * @param angle
+     * @param bitmap
+     * @return Bitmap
+     */
+    public static Bitmap rotatingImageView(int angle , Bitmap bitmap) {
+        //旋转图片 动作
+        Matrix matrix = new Matrix();
+        matrix.postRotate(angle);
+        // 创建新的图片
+        Bitmap resizedBitmap = Bitmap.createBitmap(bitmap, 0, 0,
+                bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        return resizedBitmap;
     }
 }
