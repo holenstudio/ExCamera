@@ -2,6 +2,8 @@ package com.holenstudio.excamera;
 
 import org.junit.Test;
 
+import java.security.MessageDigest;
+
 import static org.junit.Assert.*;
 
 /**

@@ -212,6 +212,7 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case R.id.iv_switch_camera:
                     mCameraFrontView.clearFaces();
+                    mCamera.setPreviewCallback(null);
                     mCamera = mCameraHolder.switchCamera();
                     mParams = mCameraHolder.getParameter();
                     mCameraInfo = mCameraHolder.getCameraInfo();
@@ -323,6 +324,7 @@ public class MainActivity extends AppCompatActivity {
                 mParams.setPreviewSize(mCameraPreview.getMeasuredHeight(), mCameraPreview.getMeasuredWidth());
                 mCamera.setParameters(mParams);
                 mPopupWindow.setCameraParams(mParams);
+                mCamera.setPreviewCallback(mPreviewCallback);
                 mCamera.startPreview();
                 startFaceDetection();
                 // mCamera.autoFocus(mAutoFocusCallback);
@@ -353,6 +355,7 @@ public class MainActivity extends AppCompatActivity {
                 mParams.setPreviewSize(mCameraPreview.getMeasuredHeight(), mCameraPreview.getMeasuredWidth());
                 mCamera.setDisplayOrientation(90);
                 mCamera.setParameters(mParams);
+                mCamera.setPreviewCallback(mPreviewCallback);
                 mPopupWindow.setCameraParams(mParams);
                 mCamera.startPreview();
                 startFaceDetection();
@@ -364,6 +367,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
             mIsStartFaceDetection = false;
+//            mCamera.setPreviewCallback(null);
             // release camera
             // CameraUtil.releaseCamera();
         }
@@ -377,6 +381,19 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private Camera.PreviewCallback mPreviewCallback = new Camera.PreviewCallback() {
+        @Override
+        public void onPreviewFrame(byte[] data, Camera camera) {
+            int imageType = mParams.getPreviewFormat();
+            int[] rgbArray;
+            int width = mParams.getPreviewSize().width;
+            int height = mParams.getPreviewSize().height;
+            rgbArray = CameraUtil.decodeYUV420SP(data, width, height);
+            Bitmap bmp = Bitmap.createBitmap(rgbArray, width, height, Bitmap.Config.ARGB_8888);
+            bmp = Bitmap.createScaledBitmap(bmp, mPictureIv.getWidth(), mPictureIv.getHeight(), true);
+            mPictureIv.setImageBitmap(bmp);
+        }
+    };
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -520,6 +537,7 @@ public class MainActivity extends AppCompatActivity {
     private void releaseCamera() {
         if (mCamera != null) {
             try {
+                mCamera.setPreviewCallback(null);
                 mIsStartFaceDetection = false;
                 mCamera.stopPreview();
                 mCamera.release();
