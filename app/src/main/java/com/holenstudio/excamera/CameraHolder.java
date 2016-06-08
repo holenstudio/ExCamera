@@ -11,6 +11,7 @@ import com.holenstudio.excamera.util.CameraUtil;
 import com.holenstudio.excamera.util.FileUtil;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * Camera类
@@ -21,11 +22,13 @@ public class CameraHolder {
     private static CameraHolder mHolder = null;
     private Camera mCamera;
     private CameraInfo mCameraInfo;
-    private Camera.Parameters mParameter;
+    private Camera.Parameters mParameters;
     private boolean mIsFrontCamera;
     private int cameraCount;
     private int cameraId = CameraInfo.CAMERA_FACING_BACK;
     private static String mRecorderPath;
+    private boolean mIsStartFaceDetection;
+    private OnCameraOpenedCallback mOpenedCallback;
 
     public static CameraHolder getCameraHolder() {
         if (mHolder == null) {
@@ -40,62 +43,76 @@ public class CameraHolder {
 
     public CameraHolder() {
         mCamera = getBackCameraInstance();
-    }
-
-    public Camera getCameraInstance() {
-        Camera camera = null;
-            try {
-                camera = Camera.open();
-                mIsFrontCamera = false;
-                mCameraInfo = new CameraInfo();
-            } catch (Exception e) {
-                Log.d(TAG, "Error open camera:" + e.getMessage());
-            }
-        return camera;
-    }
-
-    public Camera getCameraInstance(boolean isFrontCamera) {
-        if (mCamera == null) {
-            mCamera = getCameraInstance();
+        if (mOpenedCallback != null) {
+            mOpenedCallback.doCallback();
         }
-        cameraCount = mCamera.getNumberOfCameras();
+        initCameraParams();
+    }
+
+    private void initCameraParams() {
+        mParameters.setAntibanding(Camera.Parameters.ANTIBANDING_AUTO);
+        mParameters.setColorEffect(Camera.Parameters.EFFECT_NONE);
+        mParameters.setFlashMode(Camera.Parameters.FLASH_MODE_AUTO);
+        mParameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+        mParameters.setJpegQuality(100);
+        mParameters.setWhiteBalance(Camera.Parameters.WHITE_BALANCE_AUTO);
+        List<Camera.Size> supporteSize = mParameters.getSupportedPictureSizes();
+        for (Camera.Size size:supporteSize) {
+            Log.d(TAG, "width=" + size.width + ", height=" + size.height);
+            if (size.width == 1280) {
+                mParameters.setPictureSize(size.width, size.height);
+            }
+            if (size.height == 720) {
+                mParameters.setPictureSize(size.width, size.height);
+            }
+        }
+        setParameters(mParameters);
+    }
+
+    private Camera getCameraInstance(boolean isFrontCamera) {
+        if (mCamera != null) {
+            mCamera.release();
+            mCamera = null;
+        }
+        cameraCount = Camera.getNumberOfCameras();
         Camera.CameraInfo info = new CameraInfo();
 
         for (int i = 0; i < cameraCount; i++) {
-            mCamera.getCameraInfo(i, info);
+            Camera.getCameraInfo(i, info);
             if (isFrontCamera) {
                 if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
-                    mCamera.release();
-                    mCamera = null;
-                    cameraId = info.facing;
-                    mCamera = Camera.open(i);
+                    cameraId = i;
+                    mCamera = Camera.open(cameraId);
                     mIsFrontCamera = true;
-                    mParameter = mCamera.getParameters();
-                    mCamera.getCameraInfo(i, mCameraInfo);
+                    mParameters = mCamera.getParameters();
+                    mCameraInfo = new CameraInfo();
+                    mCameraInfo = info;
+                    return mCamera;
+//                    Camera.getCameraInfo(i, mCameraInfo);
                 }
             } else {
                 if (info.facing == CameraInfo.CAMERA_FACING_BACK) {
-                    mCamera.release();
-                    mCamera = null;
-                    cameraId = info.facing;
-                    mCamera = Camera.open(i);
+                    cameraId = i;
+                    mCamera = Camera.open(cameraId);
                     mIsFrontCamera = false;
-                    mParameter = mCamera.getParameters();
-                    mCamera.getCameraInfo(i, mCameraInfo);
+                    mParameters = mCamera.getParameters();
+                    mCameraInfo = info;
+                    return mCamera;
+//                    Camera.getCameraInfo(i, mCameraInfo);
                 }
             }
         }
         return mCamera;
     }
 
-    public Camera getFrontCameraInstance() {
+    private Camera getFrontCameraInstance() {
         if (mCamera != null && mIsFrontCamera) {
             return mCamera;
         }
         return getCameraInstance(true);
     }
 
-    public Camera getBackCameraInstance() {
+    private Camera getBackCameraInstance() {
         if (mCamera != null && !mIsFrontCamera) {
             return mCamera;
         }
@@ -122,15 +139,15 @@ public class CameraHolder {
     }
 
     public void setParameters (Camera.Parameters params) {
-        mParameter = params;
-        mCamera.setParameters(mParameter);
+        mParameters = params;
+        mCamera.setParameters(mParameters);
     }
 
     public Camera.Parameters getParameter () {
-        if (mParameter == null) {
-            mParameter = mCamera.getParameters();
+        if (mParameters == null) {
+            mParameters = mCamera.getParameters();
         }
-        return mParameter;
+        return mParameters;
     }
 
     public Camera getCamera () {
@@ -186,5 +203,26 @@ public class CameraHolder {
 
     public static String getRecorderPath() {
         return mRecorderPath;
+    }
+    
+    public void releaseCamera () {
+        mCamera.setPreviewCallback(null);
+        mIsStartFaceDetection = false;
+        mCamera.stopPreview();
+        mCamera.release();
+        mCamera = null;
+    }
+
+    public void reloadParameters () {
+        if (mParameters != null) {
+            mCamera.setParameters(mParameters);
+        }
+    }
+
+    public void setOnCameraOpenedCallback(OnCameraOpenedCallback callback) {
+        mOpenedCallback = callback;
+    }
+    public interface OnCameraOpenedCallback {
+        public void doCallback();
     }
 }

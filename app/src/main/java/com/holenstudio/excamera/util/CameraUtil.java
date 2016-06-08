@@ -25,18 +25,6 @@ public class CameraUtil {
     private final static String TAG = "CameraUtil";
     public final static String FACE_DETECTION = "face_detection"; //1 start,0 stop
 
-    public static Camera switchCamera(boolean isFrontCamera) {
-        Camera camera = null;
-        if (isFrontCamera) {
-            // switch front camera to back camera
-            camera = CameraHolder.getCameraHolder().getCameraInstance(false);
-        } else {
-            // switch back camera to front
-            camera = CameraHolder.getCameraHolder().getCameraInstance(true);
-        }
-        return camera;
-    }
-
     public static boolean checkCameraHardware(Context context) {
         if (context.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_CAMERA)) {
