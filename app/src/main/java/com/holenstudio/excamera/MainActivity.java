@@ -394,7 +394,7 @@ public class MainActivity extends AppCompatActivity implements CameraHolder.OnCa
         mRecorder = new MediaRecorder();
         // surfaceview不维护自己的缓冲区，等待屏幕渲染引擎将内容推送到用户面前
         mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-//        mHolder.addCallback(mSurfaceHolderCallBack);
+        mHolder.addCallback(mSurfaceHolderCallBack);
 
         initView();
         initData();
